@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración del Bot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐕 Configuración del Bot</h1>
+            <p class="subtitle">{{ config.name if config else 'Grooming Bot' }}</p>
+        </header>
+
+        {% if not config %}
+        <div class="alert alert-info">
+            No existe configuración — crea una
+        </div>
+        {% endif %}
+
+        <main>
+            <form method="POST" action="{{ url_for('config_view') }}">
+                <div class="form-group">
+                    <label for="name">Nombre del Bot:</label>
+                    <input type="text" id="name" name="name" 
+                        value="{{ config.name if config else 'Grooming Bot' }}"
+                        maxlength="100" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="use_emojis">
+                        <input type="checkbox" id="use_emojis" name="use_emojis" 
+                            {% if config and config.use_emojis %}checked{% endif %}>
+                        Usar emojis en respuestas
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="greeting">Saludo inicial:</label>
+                    <input type="text" id="greeting" name="greeting" 
+                        value="{{ config.greeting if config else '¡Hola! ¿En qué puedo ayudarte?' }}"
+                        maxlength="200" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="tone">Tono:</label>
+                    <select id="tone" name="tone">
+                        <option value="amigable" {% if config and config.tone == 'amigable' %}selected{% endif %}>
+                            Amigable
+                        </option>
+                        <option value="formal" {% if config and config.tone == 'formal' %}selected{% endif %}>
+                            Formal
+                        </option>
+                        <option value="divertido" {% if config and config.tone == 'divertido' %}selected{% endif %}>
+                            Divertido
+                        </option>
+                        <option value="profesional" {% if config and config.tone == 'profesional' %}selected{% endif %}>
+                            Profesional
+                        </option>
+                        <option value="elegante" {% if config and config.tone == 'elegante' %}selected{% endif %}>
+                            Elegante
+                        </option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="topic">Tema:</label>
+                    <input type="text" id="topic" name="topic" 
+                        value="{{ config.topic if config else 'estética canina' }}"
+                        maxlength="200">
+                    <small>Tema principal sobre el que el bot debe responder</small>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Guardar</button>
+            </form>
+        </main>
+    </div>
+</body>
+</html>
