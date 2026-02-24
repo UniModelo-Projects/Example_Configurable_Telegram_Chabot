@@ -33,8 +33,9 @@ def run_bot_polling():
     telegram_app = setup_bot(app)
     if telegram_app:
         logger.info("Iniciando bot en modo polling...")
-        # run_polling maneja su propio bucle si se llama correctamente
-        telegram_app.run_polling(close_loop=False)
+        # En Linux/Unix, los hilos secundarios no pueden manejar señales (SIGINT, etc.)
+        # stop_signals=None es necesario para evitar el error 'set_wakeup_fd'
+        telegram_app.run_polling(stop_signals=None, close_loop=False)
     else:
         logger.error("No se pudo inicializar el bot de Telegram. Verifica el TOKEN.")
 
