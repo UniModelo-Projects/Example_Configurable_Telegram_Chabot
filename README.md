@@ -38,6 +38,39 @@ A highly flexible Telegram chatbot built with Flask and `python-telegram-bot` th
     ```
     *Note: The app runs on port 80 by default. On some systems, you may need administrator/sudo privileges.*
 
+## Deployment (AWS Lightsail) ☁️
+
+To deploy this bot on an AWS Lightsail instance (Ubuntu), follow these steps:
+
+### 1. Configure the Firewall
+In your Lightsail console, go to the **Networking** tab and ensure **Port 80 (HTTP)** is open to the public.
+
+### 2. Prepare the Instance
+```bash
+sudo apt update && sudo apt install python3-pip python3-venv -y
+git clone <your-repo-url>
+cd example-configurable-telegram-chatbot
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Set Environment Variables
+Create the `.env` file as described in the Installation section.
+
+### 4. Run in the Background
+Since the app binds to port 80, you **must** use `sudo`. To keep it running after you close the terminal, use `nohup`:
+```bash
+sudo nohup env/bin/python app.py > app.log 2>&1 &
+```
+
+### 5. Managing the Process
+*   **View Logs**: `tail -f app.log`
+*   **Check if it's running**: `ps aux | grep python` (Look for the `app.py` process).
+*   **Stop the App**: `sudo kill <PID>` (Replace `<PID>` with the process ID found in the previous step).
+
+> **Warning**: Never run more than one instance of the bot at the same time, as this will cause "Conflict" errors with the Telegram API.
+
 ## Usage 🛠️
 
 1.  Navigate to `http://localhost/config` (or your server's IP) to set up your bot's personality.
