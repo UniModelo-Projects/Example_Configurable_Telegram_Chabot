@@ -296,27 +296,40 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
-    logger.info(f"DEBUG: handle_message iniciado para el mensaje: {update.message.text if update.message else 'N/A'}")
+    logger.info(f"DEBUG: handle_message iniciado. Texto: {update.message.text if update.message else 'N/A'}")
+    
     app = context.application.bot_data.get("flask_app")
-    if not app: return
+    if not app:
+        logger.error("DEBUG: ERROR - flask_app no encontrado en bot_data")
+        return
 
     try:
-        if not update.message or not update.message.text: return
+        if not update.message or not update.message.text:
+            logger.warning("DEBUG: SKIP - mensaje o texto vacío")
+            return
+            
         user_message = update.message.text
         chat_id = update.message.chat_id
+        logger.info(f"DEBUG: Chat ID: {chat_id}, Mensaje: {user_message}")
 
         with app.app_context():
             config = BotConfig.query.first()
             services = Service.query.all()
-            if not config: return
+            
+            if not config:
+                logger.error("DEBUG: ERROR - BotConfig no encontrado en la BD")
+                return
 
-            # 1. MEJORAR SALUDO INICIAL
+            logger.info(f"DEBUG: Configuración cargada. Bot: {config.name}, Tema: {config.topic}")
+
+            # 1. SALUDO INICIAL
             greeting_keywords = ["hola", "buen", "buenas", "buenos", "saludos", "que tal", "qué tal", "hi", "hello"]
             user_msg_lower = user_message.lower().strip()
             
             is_greeting = any(user_msg_lower.startswith(kw) for kw in greeting_keywords) or user_message.startswith('/start')
             
             if is_greeting:
+                logger.info(f"DEBUG: Procesando saludo inicial...")
                 services_text = "\n".join([f"• {s.name}" for s in services])
                 welcome_msg = (
                     f"{config.greeting}\n\n"
@@ -327,15 +340,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [[InlineKeyboardButton("📝 Agendar Servicio", callback_data="start_flow")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
-                logger.info(f"DEBUG: Enviando saludo inicial a {chat_id}")
+                logger.info(f"DEBUG: Enviando mensaje de saludo a {chat_id}")
                 await context.bot.send_message(
                     chat_id=chat_id, 
                     text=welcome_msg, 
                     parse_mode='Markdown',
                     reply_markup=reply_markup
                 )
+                logger.info(f"DEBUG: Saludo enviado con éxito.")
                 return
 
+            logger.info("DEBUG: Mensaje normal, procediendo a detección de intención...")
             # 2. DETECCIÓN DE INTENCIÓN DE SERVICIO
             service_intents = ["cita", "turno", "agendar", "quiero", "necesito", "precio", "costo", "solicitar", "reserva", "servicio", "haces", "ofrecen"]
             has_service_intent = any(kw in user_msg_lower for kw in service_intents)
