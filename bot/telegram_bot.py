@@ -109,9 +109,16 @@ async def search_image(query: str) -> str:
 
 async def start_solicitud(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de solicitud de servicio."""
+    logger.info("DEBUG: Entrando a start_solicitud")
     context.user_data["_in_conv"] = True
-    message = update.message if update.message else update.callback_query.message
-    # ... (rest of logic)
+    
+    target = update.message if update.message else update.callback_query.message
+    
+    await target.reply_text(
+        "¡Excelente! Vamos a registrar tu solicitud. ¿Cuál es tu nombre completo?",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return NAME
 
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -422,9 +429,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los clics en botones inline."""
     query = update.callback_query
+    logger.info(f"DEBUG: Botón presionado. Data: {query.data}")
     await query.answer()
     
     if query.data == "start_flow":
+        logger.info("DEBUG: Activando start_solicitud desde botón")
         return await start_solicitud(update, context)
 
 
