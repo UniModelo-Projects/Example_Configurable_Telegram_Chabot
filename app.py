@@ -15,10 +15,16 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Asegurar que la carpeta instance existe para la DB
-instance_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance')
+# Asegurar que la carpeta instance existe con ruta absoluta para PythonAnywhere
+basedir = os.path.abspath(os.path.dirname(__file__))
+instance_path = os.path.join(basedir, 'instance')
 if not os.path.exists(instance_path):
     os.makedirs(instance_path)
+
+# Ajustar la URI de la base de datos si es SQLite para usar ruta absoluta
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite:///'):
+    db_path = os.path.join(instance_path, 'bot.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 
 # Inicializar SQLAlchemy
 db.init_app(app)
@@ -26,24 +32,32 @@ db.init_app(app)
 # Configurar el bot de Telegram (Modo Webhook)
 telegram_app = setup_bot(app)
 
-# --- Configuración de Loop Persistente para PythonAnywhere ---
-# Creamos un loop que correrá en un hilo separado para que no se cierre entre peticiones
+# --- Configuración de Loop Persistente ---
 bot_loop = asyncio.new_event_loop()
 
 def run_bot_loop():
     asyncio.set_event_loop(bot_loop)
-    bot_loop.run_forever()
+    try:
+        bot_loop.run_forever()
+    except Exception as e:
+        logger.error(f"Error en el loop del bot: {e}")
 
-# Iniciamos el hilo secundario
 import threading
 loop_thread = threading.Thread(target=run_bot_loop, daemon=True)
 loop_thread.start()
 
-# Inicializamos la aplicación en el loop persistente
-try:
-    asyncio.run_coroutine_threadsafe(telegram_app.initialize(), bot_loop).result(timeout=10)
-except Exception as e:
-    logger.error(f"Error inicializando telegram_app: {e}")
+# Inicialización asíncrona segura
+def init_telegram():
+    try:
+        if telegram_app:
+            future = asyncio.run_coroutine_threadsafe(telegram_app.initialize(), bot_loop)
+            future.result(timeout=20)
+            logger.info("Bot de Telegram inicializado correctamente")
+    except Exception as e:
+        logger.error(f"Error crítico inicializando bot: {e}")
+
+# Llamar a la inicialización
+init_telegram()
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -60,8 +74,14 @@ def webhook():
             # 3. Procesar la actualización de forma asíncrona en el loop persistente
             future = asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), bot_loop)
             
-            # Esperamos a que procese (máximo 30 seg)
-            future.result(timeout=30)
+            try:
+                # Esperamos a que procese (máximo 30 seg)
+                future.result(timeout=30)
+            except asyncio.TimeoutError:
+                logger.error("Timeout procesando actualización de Telegram")
+            except Exception as e:
+                logger.error(f"Error dentro de la tarea del bot: {e}")
+                logger.error(traceback.format_exc())
             
             return "OK", 200
         except Exception as e:

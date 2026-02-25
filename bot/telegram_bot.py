@@ -225,7 +225,14 @@ def setup_bot(app=None):
         logger.warning("TELEGRAM_BOT_TOKEN no está configurado")
         return None
 
-    application = Application.builder().token(token).build()
+    # Configuración de proxy para PythonAnywhere (Free Tier)
+    # httpx (usado por PTB v20+) detecta HTTPS_PROXY, pero aquí lo aseguramos
+    builder = Application.builder().token(token)
+    
+    # Si detectamos que estamos en PythonAnywhere, podríamos forzar el proxy si fuera necesario
+    # builder.proxy_url("http://proxy.server:3128") 
+    
+    application = builder.build()
     
     # Guardar la instancia de Flask en bot_data
     if app:
