@@ -1,7 +1,7 @@
 import os
 import logging
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import asyncio
 import httpx
 from openai import OpenAI
@@ -72,6 +72,43 @@ INSTRUCCIONES:
 3. No repitas el saludo inicial.
 {emoji_instruction}"""
 
+def parse_spanish_date(text: str) -> date:
+    """Procesador manual de fechas en español (no requiere IA)."""
+    text = text.lower().strip()
+    today = date.today()
+    
+    if "hoy" in text: return today
+    if "pasado mañana" in text: return today + timedelta(days=2)
+    if "mañana" in text: return today + timedelta(days=1)
+    
+    # Extraer el día (número de 1 o 2 dígitos)
+    day_match = re.search(r'\b(\d{1,2})\b', text)
+    # Lista de meses para búsqueda
+    months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    month_match = re.search(r'(' + '|'.join(months) + r')', text)
+    
+    if day_match:
+        day = int(day_match.group(1))
+        # Caso: "26 de febrero" o "febrero 26"
+        if month_match:
+            month_idx = months.index(month_match.group(1)) + 1
+            year = today.year
+            try:
+                res = date(year, month_idx, day)
+                if res < today: res = date(year + 1, month_idx, day)
+                return res
+            except: return None
+        # Caso: "el 26" (asumir mes actual o siguiente)
+        else:
+            try:
+                res = date(today.year, today.month, day)
+                if res < today:
+                    if today.month == 12: res = date(today.year + 1, 1, day)
+                    else: res = date(today.year, today.month + 1, day)
+                return res
+            except: return None
+    return None
+
 async def search_image(query: str) -> str:
     try:
         if not os.path.exists('tmp_icrawler'): os.makedirs('tmp_icrawler')
@@ -135,22 +172,35 @@ async def process_registration(update: Update, context: ContextTypes.DEFAULT_TYP
 
     elif state == STATE_DATE:
         today = date.today()
-        try:
-            prompt = f"Extrae la fecha en formato AAAA-MM-DD del texto: '{text}'. Hoy es {today}. Si no hay fecha responde ERROR."
-            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role":"user", "content":prompt}], max_tokens=20, temperature=0)
-            parsed = response.choices[0].message.content.strip()
-            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', parsed)
-            if not date_match:
-                try: chosen_date = datetime.strptime(text, "%d/%m/%Y").date()
-                except:
-                    await update.message.reply_text("No entendí la fecha. Prueba algo como '25 de febrero':")
-                    return
-            else:
-                chosen_date = datetime.strptime(date_match.group(1), "%Y-%m-%d").date()
+        chosen_date = None
+        
+        # 1. Intentar localmente primero (Plan Gratuito / Eficiencia)
+        chosen_date = parse_spanish_date(text)
+        
+        # 2. Si falló y no estamos en local, intentar con IA (Solo si el plan es de pago)
+        if not chosen_date:
+            try:
+                prompt = f"Extrae la fecha en formato AAAA-MM-DD del texto: '{text}'. Hoy es {today}. Si no hay fecha responde ERROR."
+                response = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role":"user", "content":prompt}], max_tokens=20, temperature=0)
+                parsed = response.choices[0].message.content.strip()
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', parsed)
+                if date_match:
+                    chosen_date = datetime.strptime(date_match.group(1), "%Y-%m-%d").date()
+            except:
+                pass # Falló IA por plan gratuito, ya intentamos local
 
-            if chosen_date < today:
-                await update.message.reply_text("La fecha ya pasó. Elige una futura:")
+        # 3. Fallback final: Formato estricto DD/MM/AAAA
+        if not chosen_date:
+            try:
+                chosen_date = datetime.strptime(text, "%d/%m/%Y").date()
+            except:
+                await update.message.reply_text("No entendí la fecha. Prueba con 'mañana', '26 de febrero' o '26/02/2026':")
                 return
+
+        # 4. Validar y Guardar
+        if chosen_date < today:
+            await update.message.reply_text(f"La fecha {chosen_date.strftime('%d/%m/%Y')} ya pasó. Elige una futura:")
+            return
 
             # Guardar
             name = context.user_data["lead_name"]
