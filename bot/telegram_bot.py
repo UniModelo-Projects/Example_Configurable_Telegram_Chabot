@@ -134,22 +134,30 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Valida y guarda el teléfono, asegurando que sea único por usuario."""
     global _flask_app
     phone = update.message.text.strip()
-    # ...
-    # (rest of validation)
+    
+    # Validación simple de teléfono
+    if not re.match(r'^\+?[\d\s-]{7,15}$', phone):
+        await update.message.reply_text("Por favor, ingresa un número de teléfono válido (ej: +123456789 o 12345678).")
+        return PHONE
     
     # Verificar si el teléfono ya existe con otro nombre
     name = context.user_data["lead_name"]
     
     with _flask_app.app_context():
-        # ...
-        # (rest of logic)
+        # Buscar cualquier registro previo con este teléfono
+        existing_lead = Lead.query.filter_by(phone=phone).first()
+        if existing_lead and existing_lead.name.strip().lower() != name.strip().lower():
+            await update.message.reply_text(
+                f"Lo siento, el número {phone} ya se encuentra registrado con otro nombre. "
+                "Por favor, verifica tu número o contacta a soporte si crees que esto es un error."
+            )
+            return PHONE
 
     context.user_data["lead_phone"] = phone
     
     # Mostrar servicios disponibles
     with _flask_app.app_context():
         services = Service.query.all()
-        # ...
         if not services:
             await update.message.reply_text("Lo siento, no hay servicios configurados en este momento. Intenta más tarde.")
             return ConversationHandler.END
