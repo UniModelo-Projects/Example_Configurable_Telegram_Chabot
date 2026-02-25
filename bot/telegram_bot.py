@@ -71,14 +71,16 @@ Responde con autoridad sobre {config.topic}. Sé experto pero entretenido."""
 async def search_image(query: str) -> str:
     """Busca una imagen en Bing usando icrawler y retorna el URL."""
     try:
-        # Create a temporary directory for icrawler (it needs one even if we don't save)
-        if not os.path.exists('tmp_icrawler'):
-            os.makedirs('tmp_icrawler')
+        # Usar ruta absoluta para el directorio temporal
+        tmp_dir = os.path.join(Config.BASE_DIR if hasattr(Config, 'BASE_DIR') else os.getcwd(), 'tmp_icrawler')
+        
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
             
         crawler = BingImageCrawler(
             downloader_cls=UrlDownloader,
             downloader_threads=1,
-            storage={'root_dir': 'tmp_icrawler'},
+            storage={'root_dir': tmp_dir},
             log_level=logging.ERROR
         )
         crawler.crawl(keyword=query, max_num=1)
