@@ -74,16 +74,21 @@ def config_view():
 def webhook():
     """Endpoint para recibir actualizaciones de Telegram."""
     if request.method == "POST":
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            # Asegurar inicialización
-            loop.run_until_complete(_init_bot_instance())
+            # Obtenemos los datos de la actualización
+            update_data = request.get_json(force=True)
             
-            update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-            loop.run_until_complete(telegram_app.process_update(update))
-        finally:
-            loop.close()
+            async def process():
+                # El context manager 'async with' inicializa y cierra el bot limpiamente
+                async with telegram_app:
+                    update = Update.de_json(update_data, telegram_app.bot)
+                    await telegram_app.process_update(update)
+            
+            # asyncio.run crea un nuevo loop y lo cierra al terminar
+            asyncio.run(process())
+            
+        except Exception as e:
+            logger.error(f"Error procesando webhook: {e}")
             
         return "OK", 200
     return "Forbidden", 403
@@ -93,24 +98,21 @@ def set_webhook():
     """Ruta para registrar el webhook en Telegram."""
     webhook_url = Config.WEBHOOK_URL
     if not webhook_url:
-        return "Error: WEBHOOK_URL no está configurado en .env. Debe ser https://TU_USUARIO.pythonanywhere.com", 400
+        return "Error: WEBHOOK_URL no está configurado en .env", 400
     
-    # Asegurar que termina en /webhook
     actual_webhook_url = webhook_url if webhook_url.endswith("/webhook") else f"{webhook_url.rstrip('/')}/webhook"
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        # Asegurar inicialización
-        loop.run_until_complete(_init_bot_instance())
-        success = loop.run_until_complete(telegram_app.bot.set_webhook(url=actual_webhook_url))
-    finally:
-        loop.close()
+    async def _set():
+        async with telegram_app:
+            return await telegram_app.bot.set_webhook(url=actual_webhook_url)
 
-    if success:
-        return f"Webhook configurado correctamente en: {actual_webhook_url}", 200
-    else:
+    try:
+        success = asyncio.run(_set())
+        if success:
+            return f"Webhook configurado correctamente en: {actual_webhook_url}", 200
         return "Fallo al configurar el Webhook", 500
+    except Exception as e:
+        return f"Error: {str(e)}", 500
 
 def init_db():
     """Inicializa la base de datos."""
