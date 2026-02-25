@@ -35,7 +35,7 @@ import httpx
 client = OpenAI(
     api_key=Config.OPENAI_API_KEY,
     http_client=httpx.Client(
-        proxies="http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
+        proxy="http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
     )
 )
 
