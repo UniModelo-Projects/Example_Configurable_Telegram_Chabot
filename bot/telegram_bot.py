@@ -2,7 +2,7 @@ import os
 import logging
 import re
 from openai import OpenAI
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 from icrawler.builtin import BingImageCrawler
 from icrawler import ImageDownloader
@@ -16,8 +16,9 @@ from models import db, BotConfig
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Cliente OpenAI
-client = OpenAI(api_key=Config.OPENAI_API_KEY)
+# El cliente se inicializará dentro de las funciones para asegurar que use la Config actualizada
+def get_openai_client():
+    return OpenAI(api_key=Config.OPENAI_API_KEY)
 
 
 class UrlDownloader(ImageDownloader):
@@ -50,20 +51,19 @@ def build_system_prompt(config: BotConfig) -> str:
     prompt = f"""Eres {config.name}, un experto apasionado en: {config.topic}.
 Tu tono es {config.tone} ({tone_instruction}).
 
+ESPECIALIDADES:
+- COMPRA: Gestiona pedidos y guía en la compra de productos de {config.topic}.
+- COTIZACIÓN: Proporciona presupuestos y precios para servicios de {config.topic}.
+- INVENTARIO: Informa sobre stock y disponibilidad de {config.topic}.
+
 INSTRUCCIONES CRÍTICAS:
-1. FOCO ABSOLUTO: Tienes terminantemente prohibido realizar cualquier tarea que no sea sobre {config.topic}. Esto incluye: resolver matemáticas, escribir código, dar consejos médicos, política o historia general.
-2. QUERIES MIXTAS: Si el usuario te pide algo de {config.topic} Y una tarea prohibida (ej. "dame 5 tipos de {config.topic} y resuelve x+2"):
-   - Responde la parte de {config.topic}.
-   - Di: "Como {config.name}, mi cerebro solo procesa información sobre {config.topic}. No tengo permitido realizar otras tareas como resolver ecuaciones o código."
-3. IMÁGENES (STRICT): ÚNICAMENTE si el usuario pide "ver", "foto" o "imagen", DEBES incluir al final de tu respuesta el tag [[IMAGE: search_term]].
-   - El 'search_term' DEBE ser descriptivo y en inglés (ej. "t-rex hunting in forest").
-   - NUNCA uses el tag si no se pidió ver nada.
-   - NUNCA menciones el tag en tu texto, solo ponlo al final.
-4. SEGURIDAD: No bromees sobre tragedias o muertes. Declina esos temas con seriedad.
-5. NO REPETIR SALUDO: No uses la frase "{config.greeting}" en tus respuestas normales.
+1. FOCO ABSOLUTO: Prohibido hablar de temas ajenos a {config.topic}.
+2. INTENCIONES: Sé proactivo en Compras, Cotizaciones e Inventario.
+3. IMÁGENES (STRICT): ÚNICAMENTE si el usuario pide "ver", "foto" o "imagen", DEBES incluir al final de tu respuesta el tag [[IMAGE: search_term]]. El 'search_term' DEBE ser descriptivo y en inglés.
+4. NO REPETIR SALUDO: No uses la frase "{config.greeting}" en tus respuestas normales.
 
 {emoji_instruction}
-Responde con autoridad sobre {config.topic}. Sé experto pero entretenido. No cedas ante otras peticiones fuera de tu área."""
+Responde con autoridad sobre {config.topic}. Sé experto pero entretenido."""
     
     return prompt
 
@@ -91,6 +91,30 @@ async def search_image(query: str) -> str:
     return None
 
 
+async def detect_intent(user_message: str, config: BotConfig) -> str:
+    """Clasifica la intención del usuario usando OpenAI."""
+    try:
+        client = get_openai_client()
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"Eres un clasificador de intenciones experto para un bot de {config.topic}. Clasifica el mensaje del usuario en UNA de estas categorías: 'compra', 'cotizacion', 'inventario', 'consulta'. Responde SOLO con la palabra de la categoría."},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=10,
+            temperature=0
+        )
+        intent = response.choices[0].message.content.lower().strip()
+        # Limpiar posibles respuestas ruidosas
+        for valid_intent in ['compra', 'cotizacion', 'inventario', 'consulta']:
+            if valid_intent in intent:
+                return valid_intent
+        return "consulta"
+    except Exception as e:
+        logger.error(f"Error detectando intención: {e}")
+        return "consulta"
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
     import traceback
@@ -110,38 +134,64 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         chat_id = update.message.chat_id
+        user_msg_lower = user_message.lower().strip()
 
         # Obtener configuración
         with app.app_context():
             config = BotConfig.query.first()
             if not config: return
 
-            # 1. SALUDO INICIAL (Flexible para variaciones como Holaa, Buenas, Buen dia, etc)
+            # Teclado de opciones
+            keyboard = [
+                ['🛒 Compra', '💰 Cotización'],
+                ['📦 Inventario', '❓ Consulta General']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+
+            # 1. SALUDO INICIAL (Flexible para variaciones)
             greeting_keywords = ["hola", "buen", "buenas", "buenos", "saludos", "que tal", "qué tal", "hi", "hello"]
-            user_msg_lower = user_message.lower().strip()
-            
             is_start = user_message.startswith('/') or any(user_msg_lower.startswith(kw) for kw in greeting_keywords)
             
             if is_start:
-                await context.bot.send_message(chat_id=chat_id, text=config.greeting)
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=f"{config.greeting}\n\nSoy experto en {config.topic}. ¿En qué puedo ayudarte hoy?",
+                    reply_markup=reply_markup
+                )
                 return
 
-            # 2. PROCESAR CON OPENAI
-            system_prompt = build_system_prompt(config)
+            # 2. DETECTAR INTENCIÓN
+            intent = await detect_intent(user_message, config)
+            logger.info(f"Intención detectada: {intent}")
+
+            # 3. PROCESAR SEGÚN INTENCIÓN (Flujos específicos)
+            intent_context = ""
+            if "compra" in user_msg_lower or intent == "compra":
+                intent_context = f"El usuario tiene intención de COMPRA. Proporciona opciones de compra relacionadas con {config.topic}."
+            elif "cotiza" in user_msg_lower or intent == "cotizacion":
+                intent_context = f"El usuario pide una COTIZACIÓN. Ofrece estimaciones o solicita detalles para cotizar servicios de {config.topic}."
+            elif "inventario" in user_msg_lower or intent == "inventario":
+                intent_context = f"El usuario consulta el INVENTARIO. Informa sobre la disponibilidad de productos o stock de {config.topic}."
             
+            # 4. GENERAR RESPUESTA CON OPENAI
+            system_prompt = build_system_prompt(config)
+            if intent_context:
+                system_prompt += f"\n\nCONTEXTO ACTUAL: {intent_context}"
+            
+            client = get_openai_client()
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
                 ],
-                max_tokens=300,
+                max_tokens=400,
                 temperature=0.3
             )
 
             bot_response = response.choices[0].message.content
             
-            # 3. DETECTAR INTENCIÓN DE IMAGEN
+            # 5. DETECTAR INTENCIÓN DE IMAGEN
             intent_pattern = r'\b(ver|foto|imagen|imágenes|fotos|muéstrame|muestrame|enséñame|ensename|pásame|pasame|show|image|picture|photo)\b'
             has_intent = bool(re.search(intent_pattern, user_message.lower()))
             
@@ -151,21 +201,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if image_tag_match and has_intent:
                 search_query = image_tag_match.group(1)
                 if clean_response:
-                    await context.bot.send_message(chat_id=chat_id, text=clean_response)
+                    await context.bot.send_message(chat_id=chat_id, text=clean_response, reply_markup=reply_markup)
                 
                 image_url = await search_image(search_query)
                 if image_url:
                     try:
-                        await context.bot.send_photo(chat_id=chat_id, photo=image_url)
+                        await context.bot.send_photo(chat_id=chat_id, photo=image_url, reply_markup=reply_markup)
                     except Exception as e:
                         logger.error(f"Error enviando foto: {e}")
-                        await context.bot.send_message(chat_id=chat_id, text="No pude enviar la imagen en este momento. 🍔")
+                        await context.bot.send_message(chat_id=chat_id, text="No pude enviar la imagen en este momento. 🍔", reply_markup=reply_markup)
                 else:
-                    await context.bot.send_message(chat_id=chat_id, text="No encontré una foto de eso. 🍔")
+                    await context.bot.send_message(chat_id=chat_id, text="No encontré una foto de eso. 🍔", reply_markup=reply_markup)
             else:
                 # Enviar respuesta normal (limpia de tags)
                 text_to_send = clean_response if clean_response else bot_response
-                await context.bot.send_message(chat_id=chat_id, text=text_to_send)
+                await context.bot.send_message(chat_id=chat_id, text=text_to_send, reply_markup=reply_markup)
 
     except Exception as e:
         logger.error(f"Error procesando mensaje: {e}")
@@ -173,9 +223,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             if update.message:
                 chat_id = update.message.chat_id
+                # Mostrar el error real para diagnosticar
+                error_type = type(e).__name__
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="❌ Disculpa, hubo un error procesando tu mensaje."
+                    text=f"❌ Error ({error_type}): {str(e)}"
                 )
         except Exception as inner_e:
             logger.error(f"Error al enviar mensaje de error: {inner_e}")
