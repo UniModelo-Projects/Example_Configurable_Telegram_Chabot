@@ -1,12 +1,9 @@
 import os
 import logging
-import threading
-import asyncio
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for
 
 from config import Config
 from models import db, BotConfig
-from bot.telegram_bot import setup_bot
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,29 +12,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Asegurar que la carpeta instance existe para la DB
+instance_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance')
+if not os.path.exists(instance_path):
+    os.makedirs(instance_path)
+
 # Inicializar SQLAlchemy
 db.init_app(app)
-
-# Bot de Telegram
-telegram_app = None
-
-
-def run_bot_polling():
-    """Ejecuta el bot de Telegram en modo polling."""
-    global telegram_app
-    
-    # Crear un nuevo loop de eventos para este hilo
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    telegram_app = setup_bot(app)
-    if telegram_app:
-        logger.info("Iniciando bot en modo polling...")
-        # En Linux/Unix, los hilos secundarios no pueden manejar señales (SIGINT, etc.)
-        # stop_signals=None es necesario para evitar el error 'set_wakeup_fd'
-        telegram_app.run_polling(stop_signals=None, close_loop=False)
-    else:
-        logger.error("No se pudo inicializar el bot de Telegram. Verifica el TOKEN.")
 
 
 @app.route("/")
@@ -90,16 +71,10 @@ def init_db():
     with app.app_context():
         db.create_all()
 
+# Inicializar base de datos al arrancar
+init_db()
 
 if __name__ == "__main__":
-    # Inicializar base de datos
-    init_db()
-    
-    # Iniciar el bot en un hilo separado
-    bot_thread = threading.Thread(target=run_bot_polling, daemon=True)
-    bot_thread.start()
-    
-    # Ejecutar Flask
-    # Nota: use_reloader=False es importante cuando se usan hilos para evitar
-    # que el bot se inicie dos veces.
-    app.run(host="0.0.0.0", port=80, debug=False)
+    # Local development: Ejecutar Flask en puerto 8080 (o el que prefieras)
+    # Nota: En PythonAnywhere, este bloque no se ejecuta; el servidor WSGI lo maneja.
+    app.run(host="0.0.0.0", port=8080, debug=True)
