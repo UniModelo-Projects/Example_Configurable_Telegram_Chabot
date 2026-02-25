@@ -202,6 +202,7 @@ async def process_registration(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(f"La fecha {chosen_date.strftime('%d/%m/%Y')} ya pasó. Elige una futura:")
             return
 
+        try:
             # Guardar
             name = context.user_data["lead_name"]
             phone = context.user_data["lead_phone"]
@@ -219,7 +220,7 @@ async def process_registration(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data["state"] = STATE_NONE
         except Exception as e:
             logger.error(f"Error en fecha: {e}")
-            await update.message.reply_text("Hubo un error. Intenta de nuevo la fecha:")
+            await update.message.reply_text("Hubo un error al guardar tu cita. Por favor intenta de nuevo la fecha:")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["state"] = STATE_NONE
