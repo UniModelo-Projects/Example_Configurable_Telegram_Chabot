@@ -33,14 +33,22 @@ def index():
     """Página principal."""
     return redirect(url_for("config_view"))
 
+# Instancia global del bot para reutilizar en PythonAnywhere
+_global_bot_app = None
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     """Endpoint para recibir actualizaciones de Telegram de forma síncrona y segura."""
+    global _global_bot_app
+    
     try:
         data = request.get_json(force=True)
-        logger.info(f"DEBUG: Webhook recibido: {data}")
         
-        bot_app = setup_bot(app)
+        # Inicializar la instancia global una sola vez
+        if _global_bot_app is None:
+            _global_bot_app = setup_bot(app)
+            
+        bot_app = _global_bot_app
         update = Update.de_json(data, bot_app.bot)
         
         loop = asyncio.new_event_loop()
@@ -48,18 +56,16 @@ def webhook():
         
         async def process():
             try:
-                await bot_app.initialize()
-                await bot_app.start()
-                logger.info(f"DEBUG: Procesando update ID: {update.update_id}")
+                if not bot_app.running:
+                    await bot_app.initialize()
+                    await bot_app.start()
+                
                 await bot_app.process_update(update)
-                # Forzar guardado de estado
                 await bot_app.update_persistence()
-                logger.info("DEBUG: Update procesado y persistencia guardada.")
             finally:
-                # CRITICO: Detener y apagar para cerrar conexiones antes de cerrar el loop
-                if bot_app.running:
-                    await bot_app.stop()
-                await bot_app.shutdown()
+                # En modo Webhook persistente, NO llamamos a stop/shutdown aquí
+                # solo dejamos que el loop se cierre.
+                pass
             
         loop.run_until_complete(process())
         loop.close()

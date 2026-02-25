@@ -109,13 +109,9 @@ async def search_image(query: str) -> str:
 
 async def start_solicitud(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de solicitud de servicio."""
+    context.user_data["_in_conv"] = True
     message = update.message if update.message else update.callback_query.message
-    
-    await message.reply_text(
-        "¡Excelente! Vamos a registrar tu solicitud. ¿Cuál es tu nombre completo?",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    return NAME
+    # ... (rest of logic)
 
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -280,11 +276,13 @@ Fecha:"""
         f"¡Listo {name}! Hemos registrado tu solicitud para {service_name} el día {chosen_date.strftime('%d/%m/%Y')}. "
         "Nos pondremos en contacto contigo pronto. 😊"
     )
+    context.user_data["_in_conv"] = False
     return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancela la conversación."""
+    context.user_data["_in_conv"] = False
     await update.message.reply_text(
         "Solicitud cancelada. Si necesitas algo más, aquí estoy.",
         reply_markup=ReplyKeyboardRemove()
@@ -300,6 +298,13 @@ _flask_app = None
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
     global _flask_app
+    
+    # FAILSAFE: Si el usuario está en un estado de conversación, NO procesar con IA
+    # Esto evita que la IA responda a "Fernando" mientras el bot espera el nombre
+    if context.user_data.get("_in_conv"):
+        logger.info("DEBUG: Mensaje ignorado por IA porque hay una conversación activa.")
+        return
+
     logger.info(f"DEBUG: handle_message iniciado. Texto: {update.message.text if update.message else 'N/A'}")
     
     if not _flask_app:
