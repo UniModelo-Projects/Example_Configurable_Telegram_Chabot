@@ -296,6 +296,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
+    logger.info(f"DEBUG: handle_message iniciado para el mensaje: {update.message.text if update.message else 'N/A'}")
     app = context.application.bot_data.get("flask_app")
     if not app: return
 
@@ -402,6 +403,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await start_solicitud(update, context)
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message to notify the developer."""
+    logger.error(f"DEBUG: Exception while handling an update: {context.error}")
+
 def setup_bot(app=None):
     """Configura y retorna la aplicación del bot."""
     token = Config.TELEGRAM_BOT_TOKEN
@@ -421,6 +426,9 @@ def setup_bot(app=None):
     application = builder.build()
     
     if app: application.bot_data["flask_app"] = app
+    
+    # Agregar handler de errores
+    application.add_error_handler(error_handler)
     
     # Handler para la solicitud de servicio (ConversationHandler)
     conv_handler = ConversationHandler(
