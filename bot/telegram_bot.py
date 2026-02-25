@@ -14,6 +14,7 @@ from telegram.ext import (
     PicklePersistence,
     filters
 )
+from telegram.request import HTTPXRequest
 from icrawler.builtin import BingImageCrawler
 from icrawler import ImageDownloader
 
@@ -406,10 +407,19 @@ def setup_bot(app=None):
     token = Config.TELEGRAM_BOT_TOKEN
     if not token: return None
 
+    # Configurar proxy para PythonAnywhere si estamos en su dominio
+    proxy_url = "http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
+    request_obj = HTTPXRequest(proxy_url=proxy_url) if proxy_url else None
+
     # Agregar persistencia para que el estado de la conversación no se pierda en PythonAnywhere
     persistence = PicklePersistence(filepath="bot_persistence.pickle")
 
-    application = Application.builder().token(token).persistence(persistence).build()
+    builder = Application.builder().token(token).persistence(persistence)
+    if request_obj:
+        builder = builder.request(request_obj)
+        
+    application = builder.build()
+    
     if app: application.bot_data["flask_app"] = app
     
     # Handler para la solicitud de servicio (ConversationHandler)
