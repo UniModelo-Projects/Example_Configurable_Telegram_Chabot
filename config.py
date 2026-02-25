@@ -1,11 +1,13 @@
 import os
 from dotenv import load_dotenv
 
-# Cargar variables de entorno desde .env si existe
-load_dotenv()
-
-# Determinar la ruta base del proyecto
+# Determinar la ruta base del proyecto ANTES de cargar el .env
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Forzar la carga del .env usando la ruta absoluta
+dotenv_path = os.path.join(BASE_DIR, '.env')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
 
 class Config:
     """Configuración de la aplicación Flask."""
@@ -14,7 +16,6 @@ class Config:
     
     # En PythonAnywhere es fundamental usar rutas absolutas para SQLite
     default_db_path = os.path.join(BASE_DIR, "instance", "bot_config.db")
-    # Asegurar que el directorio instance existe
     if not os.path.exists(os.path.join(BASE_DIR, "instance")):
         os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
         
@@ -23,9 +24,7 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # OpenAI
+    # Limpiar posibles comillas de las variables de entorno
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip().replace('"', '').replace("'", "")
-
-    # Telegram
-    TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+    TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip().replace('"', '').replace("'", "")
+    WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").strip().replace('"', '').replace("'", "")
