@@ -3,6 +3,7 @@ import logging
 import re
 from datetime import datetime, date
 import asyncio
+import httpx
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -39,18 +40,8 @@ client = OpenAI(
     api_key=Config.OPENAI_API_KEY,
     http_client=httpx.Client(
         proxy="http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
-    ) if 'httpx' in globals() else None
-)
-
-# Re-importar httpx por si acaso
-import httpx
-if not client.http_client:
-    client = OpenAI(
-        api_key=Config.OPENAI_API_KEY,
-        http_client=httpx.Client(
-            proxy="http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
-        )
     )
+)
 
 class UrlDownloader(ImageDownloader):
     def __init__(self, *args, **kwargs):
