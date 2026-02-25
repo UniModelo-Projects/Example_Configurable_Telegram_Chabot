@@ -29,8 +29,15 @@ logger = logging.getLogger(__name__)
 # Estados de la conversación
 NAME, PHONE, SERVICE_STATE, DATE_STATE = range(4)
 
-# Cliente OpenAI
-client = OpenAI(api_key=Config.OPENAI_API_KEY)
+import httpx
+
+# Cliente OpenAI con soporte para proxy de PythonAnywhere
+client = OpenAI(
+    api_key=Config.OPENAI_API_KEY,
+    http_client=httpx.Client(
+        proxies="http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
+    )
+)
 
 
 class UrlDownloader(ImageDownloader):
@@ -333,19 +340,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mentions_service = any(s.name.lower() in user_msg_lower for s in services)
 
             # 3. PROCESAR CON OPENAI
-            system_prompt = build_system_prompt(config, services)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                max_tokens=300,
-                temperature=0.3
-            )
+            try:
+                system_prompt = build_system_prompt(config, services)
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    max_tokens=300,
+                    temperature=0.3
+                )
+                bot_response = response.choices[0].message.content
+            except Exception as ai_err:
+                logger.error(f"Error de OpenAI: {ai_err}")
+                bot_response = "¡Hola! Estoy teniendo problemas para conectar con mi cerebro de IA (OpenAI está bloqueado en el plan gratuito de PythonAnywhere). Pero puedo ayudarte a agendar si usas el comando /solicitar o presionas el botón de abajo."
 
-            bot_response = response.choices[0].message.content
-            
             # Detectar intención de imagen
             intent_pattern = r'\b(ver|foto|imagen|imágenes|fotos|muéstrame|muestrame|enséñame|ensename|pásame|pasame|show|image|picture|photo)\b'
             has_image_intent = bool(re.search(intent_pattern, user_message.lower()))
