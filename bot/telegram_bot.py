@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+from datetime import datetime
 from openai import OpenAI
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
@@ -11,7 +12,7 @@ from icrawler import ImageDownloader
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
-from models import db, BotConfig
+from models import db, BotConfig, Lead
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -91,6 +92,15 @@ async def search_image(query: str) -> str:
     return None
 
 
+def is_outside_office_hours():
+    """Verifica si estamos fuera del horario de atención: Lun-Vie 6am-9pm."""
+    now = datetime.now()
+    # weekday() devuelve 0 para Lunes y 6 para Domingo
+    is_weekend = now.weekday() >= 5
+    is_outside_time = now.hour < 6 or now.hour >= 21
+    return is_weekend or is_outside_time
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
     import traceback
@@ -110,9 +120,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         chat_id = update.message.chat_id
+        user = update.message.from_user
 
         # Obtener configuración
         with app.app_context():
+            # 0. VERIFICAR HORARIO DE ATENCIÓN Y GUARDAR LEAD
+            if is_outside_office_hours():
+                # Guardar el lead en la base de datos
+                new_lead = Lead(
+                    chat_id=chat_id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    message=user_message
+                )
+                db.session.add(new_lead)
+                db.session.commit()
+                
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text="Nuestro horario es de Lun-Vie 6am-9pm. Te contactaremos mañana."
+                )
+                return
+
             config = BotConfig.query.first()
             if not config: return
 

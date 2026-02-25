@@ -25,3 +25,15 @@ class BotConfig(db.Model):
             "tone": self.tone,
             "topic": self.topic,
         }
+
+
+class Lead(db.Model):
+    """Modelo para capturar mensajes fuera de horario."""
+    __tablename__ = "leads"
+
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.BigInteger, nullable=False)
+    username = db.Column(db.String(100))
+    first_name = db.Column(db.String(100))
+    message = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
