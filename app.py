@@ -35,26 +35,30 @@ def index():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    """Endpoint para recibir actualizaciones de Telegram de forma síncrona."""
-    bot_app = get_telegram_app()
-    if not bot_app:
-        return "Bot no configurado", 500
-        
+    """Endpoint para recibir actualizaciones de Telegram de forma síncrona y segura."""
+    # En entornos como PythonAnywhere, es más seguro crear una instancia fresca
+    # o asegurarse de que la global use el loop actual.
+    bot_app = setup_bot(app)
+    
     try:
         data = request.get_json(force=True)
         update = Update.de_json(data, bot_app.bot)
         
-        # Ejecutar el procesamiento asíncrono en un loop síncrono
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         async def process():
-            if not bot_app.running:
+            try:
                 await bot_app.initialize()
                 await bot_app.start()
-            await bot_app.process_update(update)
-            # Guardar el estado de la persistencia después de cada mensaje
-            await bot_app.update_persistence()
+                await bot_app.process_update(update)
+                # Forzar guardado de estado
+                await bot_app.update_persistence()
+            finally:
+                # CRITICO: Detener y apagar para cerrar conexiones antes de cerrar el loop
+                if bot_app.running:
+                    await bot_app.stop()
+                await bot_app.shutdown()
             
         loop.run_until_complete(process())
         loop.close()
