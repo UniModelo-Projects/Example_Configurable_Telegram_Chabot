@@ -1,8 +1,8 @@
 import os
 import logging
-import threading
 import asyncio
 from flask import Flask, render_template, request, redirect, url_for, jsonify
+from telegram import Update
 
 from config import Config
 from models import db, BotConfig, Service, Lead
@@ -18,32 +18,44 @@ app.config.from_object(Config)
 # Inicializar SQLAlchemy
 db.init_app(app)
 
-# Bot de Telegram
+# Bot de Telegram global para Webhooks
 telegram_app = None
 
-
-def run_bot_polling():
-    """Ejecuta el bot de Telegram en modo polling."""
+def get_telegram_app():
+    """Inicializa la aplicación del bot una sola vez."""
     global telegram_app
-    
-    # Crear un nuevo loop de eventos para este hilo
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    telegram_app = setup_bot(app)
-    if telegram_app:
-        logger.info("Iniciando bot en modo polling...")
-        # En Linux/Unix, los hilos secundarios no pueden manejar señales (SIGINT, etc.)
-        # stop_signals=None es necesario para evitar el error 'set_wakeup_fd'
-        telegram_app.run_polling(stop_signals=None, close_loop=False)
-    else:
-        logger.error("No se pudo inicializar el bot de Telegram. Verifica el TOKEN.")
-
+    if telegram_app is None:
+        telegram_app = setup_bot(app)
+    return telegram_app
 
 @app.route("/")
 def index():
     """Página principal."""
     return redirect(url_for("config_view"))
+
+@app.route("/webhook", methods=["POST"])
+async def webhook():
+    """Endpoint para recibir actualizaciones de Telegram."""
+    bot_app = get_telegram_app()
+    if not bot_app:
+        return "Bot no configurado", 500
+        
+    try:
+        # Procesar el update de JSON a objeto de Telegram
+        update = Update.de_json(request.get_json(force=True), bot_app.bot)
+        
+        # Iniciar la app si no lo está (necesario en v20+)
+        if not bot_app.running:
+            await bot_app.initialize()
+            await bot_app.start()
+            
+        await bot_app.process_update(update)
+    except Exception as e:
+        logger.error(f"Error en webhook: {e}")
+        
+    return "ok"
+
+@app.route("/config", methods=["GET", "POST"])
 
 
 @app.route("/config", methods=["GET", "POST"])
@@ -138,11 +150,6 @@ def init_db():
 init_db()
 
 if __name__ == "__main__":
-    # Iniciar el bot en un hilo separado
-    bot_thread = threading.Thread(target=run_bot_polling, daemon=True)
-    bot_thread.start()
-    
     # Ejecutar Flask
-    # Nota: use_reloader=False es importante cuando se usan hilos para evitar
-    # que el bot se inicie dos veces.
+    # En PythonAnywhere esto no se usa, pero es útil para pruebas locales
     app.run(host="0.0.0.0", port=80, debug=False)
