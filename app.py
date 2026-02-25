@@ -48,6 +48,7 @@ except Exception as e:
 @app.route("/webhook", methods=["POST"])
 def webhook():
     """Endpoint para recibir actualizaciones de Telegram via Webhook."""
+    import traceback
     if request.method == "POST":
         try:
             # 1. Obtener el JSON de la petición
@@ -57,15 +58,15 @@ def webhook():
             update = Update.de_json(json_string, telegram_app.bot)
             
             # 3. Procesar la actualización de forma asíncrona en el loop persistente
-            # Esto evita el error 'Event loop is closed'
             future = asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), bot_loop)
             
-            # Esperamos a que procese (opcional, pero útil para asegurar entrega)
+            # Esperamos a que procese (máximo 30 seg)
             future.result(timeout=30)
             
             return "OK", 200
         except Exception as e:
             logger.error(f"Error procesando webhook: {e}")
+            logger.error(traceback.format_exc())
             return "Error", 500
     return "Method Not Allowed", 405
 
