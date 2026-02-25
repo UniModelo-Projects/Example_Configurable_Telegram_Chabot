@@ -24,8 +24,26 @@ if not os.path.exists(instance_path):
 db.init_app(app)
 
 # Configurar el bot de Telegram (Modo Webhook)
-# Nota: No iniciamos polling aquí.
 telegram_app = setup_bot(app)
+
+# --- Configuración de Loop Persistente para PythonAnywhere ---
+# Creamos un loop que correrá en un hilo separado para que no se cierre entre peticiones
+bot_loop = asyncio.new_event_loop()
+
+def run_bot_loop():
+    asyncio.set_event_loop(bot_loop)
+    bot_loop.run_forever()
+
+# Iniciamos el hilo secundario
+import threading
+loop_thread = threading.Thread(target=run_bot_loop, daemon=True)
+loop_thread.start()
+
+# Inicializamos la aplicación en el loop persistente
+try:
+    asyncio.run_coroutine_threadsafe(telegram_app.initialize(), bot_loop).result(timeout=10)
+except Exception as e:
+    logger.error(f"Error inicializando telegram_app: {e}")
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -38,17 +56,12 @@ def webhook():
             # 2. Convertir a objeto Update de Telegram
             update = Update.de_json(json_string, telegram_app.bot)
             
-            # 3. Procesar la actualización de forma asíncrona
-            # PythonAnywhere corre Flask de forma sincrónica, por lo que creamos un loop temporal
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # 3. Procesar la actualización de forma asíncrona en el loop persistente
+            # Esto evita el error 'Event loop is closed'
+            future = asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), bot_loop)
             
-            # Es vital inicializar la aplicación si no lo está para que los handlers funcionen
-            if not telegram_app.running:
-                loop.run_until_complete(telegram_app.initialize())
-            
-            loop.run_until_complete(telegram_app.process_update(update))
-            loop.close()
+            # Esperamos a que procese (opcional, pero útil para asegurar entrega)
+            future.result(timeout=30)
             
             return "OK", 200
         except Exception as e:

@@ -69,27 +69,31 @@ Responde con autoridad sobre {config.topic}. Sé experto pero entretenido. No ce
     return prompt
 
 
+import asyncio
+
 async def search_image(query: str) -> str:
     """Busca una imagen en Bing usando icrawler y retorna el URL."""
-    try:
-        # Create a temporary directory for icrawler (it needs one even if we don't save)
-        if not os.path.exists('tmp_icrawler'):
-            os.makedirs('tmp_icrawler')
+    def _do_search():
+        try:
+            # Create a temporary directory for icrawler (it needs one even if we don't save)
+            if not os.path.exists('tmp_icrawler'):
+                os.makedirs('tmp_icrawler')
+                
+            crawler = BingImageCrawler(
+                downloader_cls=UrlDownloader,
+                downloader_threads=1,
+                storage={'root_dir': 'tmp_icrawler'},
+                log_level=logging.ERROR
+            )
+            crawler.crawl(keyword=query, max_num=1)
             
-        crawler = BingImageCrawler(
-            downloader_cls=UrlDownloader,
-            downloader_threads=1,
-            storage={'root_dir': 'tmp_icrawler'},
-            log_level=logging.ERROR
-        )
-        crawler.crawl(keyword=query, max_num=1)
-        
-        # Access the captured URL from the downloader instance
-        url = crawler.downloader.captured_url
-        return url
-    except Exception as e:
-        logger.error(f"Error en búsqueda de imagen icrawler: {e}")
-    return None
+            # Access the captured URL from the downloader instance
+            return crawler.downloader.captured_url
+        except Exception as e:
+            logger.error(f"Error en búsqueda de imagen icrawler: {e}")
+            return None
+
+    return await asyncio.to_thread(_do_search)
 
 
 def is_outside_office_hours():
@@ -158,15 +162,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 2. PROCESAR CON OPENAI
             system_prompt = build_system_prompt(config)
             
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                max_tokens=300,
-                temperature=0.3
-            )
+            def _get_completion():
+                return client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    max_tokens=300,
+                    temperature=0.3
+                )
+
+            response = await asyncio.to_thread(_get_completion)
 
             bot_response = response.choices[0].message.content
             
