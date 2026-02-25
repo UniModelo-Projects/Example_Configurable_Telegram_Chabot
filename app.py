@@ -33,45 +33,26 @@ def index():
     """Página principal."""
     return redirect(url_for("config_view"))
 
-# Instancia global del bot para reutilizar en PythonAnywhere
-_global_bot_app = None
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    """Endpoint para recibir actualizaciones de Telegram de forma síncrona y segura."""
-    global _global_bot_app
-    
+    """Endpoint para recibir actualizaciones de Telegram de forma limpia y segura."""
     try:
         data = request.get_json(force=True)
         
-        # Inicializar la instancia global una sola vez
-        if _global_bot_app is None:
-            _global_bot_app = setup_bot(app)
-            
-        bot_app = _global_bot_app
-        update = Update.de_json(data, bot_app.bot)
+        # Crear una instancia fresca por cada petición para evitar conflictos de loops
+        bot_app = setup_bot(app)
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        async def process():
-            try:
-                if not bot_app.running:
-                    await bot_app.initialize()
-                    await bot_app.start()
-                
+        async def main():
+            # El bloque 'async with' inicializa, arranca, detiene y apaga el bot automáticamente
+            async with bot_app:
+                update = Update.de_json(data, bot_app.bot)
                 await bot_app.process_update(update)
                 await bot_app.update_persistence()
-            finally:
-                # En modo Webhook persistente, NO llamamos a stop/shutdown aquí
-                # solo dejamos que el loop se cierre.
-                pass
             
-        loop.run_until_complete(process())
-        loop.close()
+        asyncio.run(main())
         
     except Exception as e:
-        logger.error(f"DEBUG: Error en webhook: {e}")
+        logger.error(f"DEBUG: Error crítico en webhook: {e}")
         return "error", 500
         
     return "ok"
