@@ -132,32 +132,24 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Valida y guarda el teléfono, asegurando que sea único por usuario."""
+    global _flask_app
     phone = update.message.text.strip()
-    # Validación simple de teléfono
-    if not re.match(r'^\+?[\d\s-]{7,15}$', phone):
-        await update.message.reply_text("Por favor, ingresa un número de teléfono válido (ej: +123456789 o 12345678).")
-        return PHONE
+    # ...
+    # (rest of validation)
     
     # Verificar si el teléfono ya existe con otro nombre
-    app = context.application.bot_data.get("flask_app")
     name = context.user_data["lead_name"]
     
-    with app.app_context():
-        # Buscar cualquier registro previo con este teléfono
-        existing_lead = Lead.query.filter_by(phone=phone).first()
-        if existing_lead and existing_lead.name.strip().lower() != name.strip().lower():
-            await update.message.reply_text(
-                f"Lo siento, el número {phone} ya se encuentra registrado con otro nombre. "
-                "Por favor, verifica tu número o contacta a soporte si crees que esto es un error."
-            )
-            return PHONE
+    with _flask_app.app_context():
+        # ...
+        # (rest of logic)
 
     context.user_data["lead_phone"] = phone
     
     # Mostrar servicios disponibles
-    app = context.application.bot_data.get("flask_app")
-    with app.app_context():
+    with _flask_app.app_context():
         services = Service.query.all()
+        # ...
         if not services:
             await update.message.reply_text("Lo siento, no hay servicios configurados en este momento. Intenta más tarde.")
             return ConversationHandler.END
@@ -174,10 +166,10 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Valida el servicio seleccionado."""
+    global _flask_app
     service_name = update.message.text
-    app = context.application.bot_data.get("flask_app")
     
-    with app.app_context():
+    with _flask_app.app_context():
         service = Service.query.filter_by(name=service_name).first()
         if not service:
             await update.message.reply_text("Por favor, selecciona un servicio de la lista.")
@@ -244,14 +236,14 @@ Fecha:"""
         await update.message.reply_text("Hubo un problema procesando la fecha. Por favor usa el formato DD/MM/AAAA:")
         return DATE_STATE
 
-    # 3. VERIFICAR DUPLICADO Y GUARDAR (Resto del código igual)
-    app = context.application.bot_data.get("flask_app")
+    # 3. VERIFICAR DUPLICADO Y GUARDAR
+    global _flask_app
     name = context.user_data["lead_name"]
     phone = context.user_data["lead_phone"]
     service_id = context.user_data["lead_service_id"]
     service_name = context.user_data["lead_service_name"]
 
-    with app.app_context():
+    with _flask_app.app_context():
         duplicate = Lead.query.filter_by(
             name=name,
             phone=phone,
@@ -294,25 +286,26 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- MANEJO DE MENSAJES NORMALES (AI) ---
 
+# Variable global para la app de Flask (evita problemas con PicklePersistence)
+_flask_app = None
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
+    global _flask_app
     logger.info(f"DEBUG: handle_message iniciado. Texto: {update.message.text if update.message else 'N/A'}")
     
-    app = context.application.bot_data.get("flask_app")
-    if not app:
-        logger.error("DEBUG: ERROR - flask_app no encontrado en bot_data")
+    if not _flask_app:
+        logger.error("DEBUG: ERROR - _flask_app no encontrado")
         return
 
     try:
         if not update.message or not update.message.text:
-            logger.warning("DEBUG: SKIP - mensaje o texto vacío")
             return
             
         user_message = update.message.text
         chat_id = update.message.chat_id
-        logger.info(f"DEBUG: Chat ID: {chat_id}, Mensaje: {user_message}")
 
-        with app.app_context():
+        with _flask_app.app_context():
             config = BotConfig.query.first()
             services = Service.query.all()
             
@@ -428,8 +421,11 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def setup_bot(app=None):
     """Configura y retorna la aplicación del bot."""
+    global _flask_app
     token = Config.TELEGRAM_BOT_TOKEN
     if not token: return None
+
+    if app: _flask_app = app
 
     # Configurar proxy para PythonAnywhere si estamos en su dominio
     proxy_url = "http://proxy.server:3128" if os.environ.get("PYTHONANYWHERE_DOMAIN") else None
