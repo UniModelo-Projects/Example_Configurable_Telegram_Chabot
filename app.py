@@ -53,6 +53,8 @@ def webhook():
                 await bot_app.initialize()
                 await bot_app.start()
             await bot_app.process_update(update)
+            # Guardar el estado de la persistencia después de cada mensaje
+            await bot_app.update_persistence()
             
         loop.run_until_complete(process())
         loop.close()

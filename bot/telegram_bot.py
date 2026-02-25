@@ -11,6 +11,7 @@ from telegram.ext import (
     CommandHandler,
     ConversationHandler,
     CallbackQueryHandler,
+    PicklePersistence,
     filters
 )
 from icrawler.builtin import BingImageCrawler
@@ -395,7 +396,10 @@ def setup_bot(app=None):
     token = Config.TELEGRAM_BOT_TOKEN
     if not token: return None
 
-    application = Application.builder().token(token).build()
+    # Agregar persistencia para que el estado de la conversación no se pierda en PythonAnywhere
+    persistence = PicklePersistence(filepath="bot_persistence.pickle")
+
+    application = Application.builder().token(token).persistence(persistence).build()
     if app: application.bot_data["flask_app"] = app
     
     # Handler para la solicitud de servicio (ConversationHandler)
