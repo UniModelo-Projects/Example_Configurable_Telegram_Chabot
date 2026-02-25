@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Leads</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container container-wide">
+        <nav>
+            <a href="{{ url_for('config_view') }}" class="nav-link">Configuración</a>
+            <a href="{{ url_for('leads_view') }}" class="nav-link active">Panel de Leads</a>
+        </nav>
+
+        <header>
+            <h1>📋 Registro de Leads</h1>
+            <p class="subtitle">Clientes interesados en tus servicios</p>
+        </header>
+
+        <main>
+            <div class="table-responsive">
+                <table class="leads-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha Registro</th>
+                            <th>Nombre</th>
+                            <th>Teléfono</th>
+                            <th>Servicio</th>
+                            <th>Fecha Cita</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in leads %}
+                        <tr>
+                            <td>{{ lead.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>{{ lead.name }}</td>
+                            <td>{{ lead.phone }}</td>
+                            <td>{{ lead.service.name }}</td>
+                            <td>{{ lead.date.strftime('%d/%m/%Y') }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center">No hay leads registrados aún.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
