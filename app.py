@@ -71,21 +71,16 @@ def webhook():
             # 2. Convertir a objeto Update de Telegram
             update = Update.de_json(json_string, telegram_app.bot)
             
-            # 3. Procesar la actualización de forma asíncrona en el loop persistente
-            future = asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), bot_loop)
-            
-            try:
-                # Esperamos a que procese (máximo 30 seg)
-                future.result(timeout=30)
-            except asyncio.TimeoutError:
-                logger.error("Timeout procesando actualización de Telegram")
-            except Exception as e:
-                logger.error(f"Error dentro de la tarea del bot: {e}")
-                logger.error(traceback.format_exc())
-            
-            return "OK", 200
+            # 3. Procesar en el loop persistente sin bloquear el worker de Flask
+            if bot_loop.is_running():
+                asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), bot_loop)
+                return "OK", 200
+            else:
+                logger.error("El loop del bot no está corriendo")
+                return "Internal Error", 500
+                
         except Exception as e:
-            logger.error(f"Error procesando webhook: {e}")
+            logger.error(f"Error recibiendo webhook: {e}")
             logger.error(traceback.format_exc())
             return "Error", 500
     return "Method Not Allowed", 405

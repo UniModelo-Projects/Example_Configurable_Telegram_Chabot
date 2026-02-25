@@ -109,6 +109,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes recibidos por el bot."""
     import traceback
     
+    chat_id = update.effective_chat.id if update.effective_chat else "Unknown"
+    logger.info(f"--- Iniciando procesamiento de mensaje para chat_id: {chat_id} ---")
+    
     app = context.application.bot_data.get("flask_app")
     if not app:
         logger.error("Flask app instance not found in bot_data")
@@ -202,6 +205,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Enviar respuesta normal (limpia de tags)
                 text_to_send = clean_response if clean_response else bot_response
                 await context.bot.send_message(chat_id=chat_id, text=text_to_send)
+
+        logger.info(f"--- Fin del procesamiento para chat_id: {chat_id} ---")
 
     except Exception as e:
         logger.error(f"Error procesando mensaje: {e}")
