@@ -22,4 +22,7 @@ class Config:
 
     # Telegram
     TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    
+    # Para PythonAnywhere, la URL suele ser: https://tu_usuario.pythonanywhere.com
+    # Se recomienda configurar esta variable en el archivo .env de PythonAnywhere
     WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
