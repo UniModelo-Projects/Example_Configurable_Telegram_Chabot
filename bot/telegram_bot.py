@@ -480,6 +480,8 @@ def setup_bot(app=None):
             DATE_STATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
         },
         fallbacks=[CommandHandler("cancelar", cancel)],
+        persistent=True,
+        name="servicio_conv"
     )
     
     application.add_handler(conv_handler)
