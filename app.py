@@ -34,24 +34,32 @@ def index():
     return redirect(url_for("config_view"))
 
 @app.route("/webhook", methods=["POST"])
-async def webhook():
-    """Endpoint para recibir actualizaciones de Telegram."""
+def webhook():
+    """Endpoint para recibir actualizaciones de Telegram de forma síncrona."""
     bot_app = get_telegram_app()
     if not bot_app:
         return "Bot no configurado", 500
         
     try:
-        # Procesar el update de JSON a objeto de Telegram
-        update = Update.de_json(request.get_json(force=True), bot_app.bot)
+        data = request.get_json(force=True)
+        update = Update.de_json(data, bot_app.bot)
         
-        # Iniciar la app si no lo está (necesario en v20+)
-        if not bot_app.running:
-            await bot_app.initialize()
-            await bot_app.start()
+        # Ejecutar el procesamiento asíncrono en un loop síncrono
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        async def process():
+            if not bot_app.running:
+                await bot_app.initialize()
+                await bot_app.start()
+            await bot_app.process_update(update)
             
-        await bot_app.process_update(update)
+        loop.run_until_complete(process())
+        loop.close()
+        
     except Exception as e:
         logger.error(f"Error en webhook: {e}")
+        return "error", 500
         
     return "ok"
 
