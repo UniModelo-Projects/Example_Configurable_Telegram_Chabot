@@ -327,6 +327,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [[InlineKeyboardButton("📝 Agendar Servicio", callback_data="start_flow")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
+                logger.info(f"DEBUG: Enviando saludo inicial a {chat_id}")
                 await context.bot.send_message(
                     chat_id=chat_id, 
                     text=welcome_msg, 
@@ -373,17 +374,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if image_tag_match and has_image_intent:
                 search_query = image_tag_match.group(1)
                 if clean_response:
+                    logger.info(f"DEBUG: Enviando texto de imagen a {chat_id}")
                     await context.bot.send_message(chat_id=chat_id, text=clean_response, reply_markup=reply_markup)
                 
                 image_url = await search_image(search_query)
                 if image_url:
                     try:
+                        logger.info(f"DEBUG: Enviando foto a {chat_id}")
                         await context.bot.send_photo(chat_id=chat_id, photo=image_url)
                     except Exception:
                         await context.bot.send_message(chat_id=chat_id, text="No pude enviar la imagen. 🍔")
                 else:
                     await context.bot.send_message(chat_id=chat_id, text="No encontré una foto de eso. 🍔")
             else:
+                logger.info(f"DEBUG: Enviando respuesta normal a {chat_id}")
                 await context.bot.send_message(
                     chat_id=chat_id, 
                     text=clean_response or bot_response,
